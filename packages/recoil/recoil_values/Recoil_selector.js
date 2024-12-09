@@ -1102,6 +1102,9 @@ function selector<T>(
   }
 
   function selectorGet(store: Store, state: TreeState): Loadable<T> {
+    if (store.skipCircularDependencyDetection_DANGEROUS === true) {
+      return getSelectorLoadableAndUpdateDeps(store, state);
+    }
     return detectCircularDependencies(() =>
       getSelectorLoadableAndUpdateDeps(store, state),
     );
@@ -1241,6 +1244,7 @@ function selector<T>(
 // $FlowFixMe[missing-local-annot]
 selector.value = value => new WrappedValue(value);
 
+// $FlowFixMe[incompatible-cast]
 module.exports = (selector: {
   <T>(ReadOnlySelectorOptions<T>): RecoilValueReadOnly<T>,
   <T>(ReadWriteSelectorOptions<T>): RecoilState<T>,

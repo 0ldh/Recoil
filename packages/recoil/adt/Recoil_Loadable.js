@@ -180,7 +180,6 @@ class LoadingLoadable<T> extends BaseLoadable<T> {
                 return nextLoadable.contents;
             }
           }
-          // $FlowIssue[incompatible-return]
           return next;
         })
         // $FlowFixMe[incompatible-call]
@@ -274,9 +273,9 @@ function loadableAll<
       output
     : // Object.getOwnPropertyNames() has consistent key ordering with ES6
       // $FlowIssue[incompatible-call]
+      // $FlowFixMe[incompatible-return] Pre-supress errors for Flow 0.207.0
       output.map(outputs =>
         Object.getOwnPropertyNames(inputs).reduce(
-          // $FlowFixMe[invalid-computed-prop]
           (out, key, idx) => ({...out, [key]: outputs[idx]}),
           {},
         ),

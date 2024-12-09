@@ -12,11 +12,11 @@
 'use strict';
 
 import type {NodeKey, StateID, StoreID} from './Recoil_Keys';
-import type {MutableSource} from './Recoil_ReactMode';
 import type {RecoilValue} from './Recoil_RecoilValue';
 import type {MutableSnapshot} from './Recoil_Snapshot';
 import type {Store, StoreRef, StoreState, TreeState} from './Recoil_State';
 
+// @fb-only: const FBLogger = require('FBLogger');
 // @fb-only: const RecoilusagelogEvent = require('RecoilusagelogEvent');
 // @fb-only: const RecoilUsageLogFalcoEvent = require('RecoilUsageLogFalcoEvent');
 // @fb-only: const URI = require('URI');
@@ -36,21 +36,20 @@ const {
 const {graph} = require('./Recoil_Graph');
 const {cloneGraph} = require('./Recoil_Graph');
 const {getNextStoreID} = require('./Recoil_Keys');
-const {createMutableSource, reactMode} = require('./Recoil_ReactMode');
+const {reactMode} = require('./Recoil_ReactMode');
 const {applyAtomValueWrites} = require('./Recoil_RecoilValueInterface');
 const {releaseScheduledRetainablesNow} = require('./Recoil_Retention');
 const {freshSnapshot} = require('./Recoil_Snapshot');
 const React = require('react');
 const {
+  Suspense,
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } = require('react');
 const err = require('recoil-shared/util/Recoil_err');
-const expectationViolation = require('recoil-shared/util/Recoil_expectationViolation');
 const gkx = require('recoil-shared/util/Recoil_gkx');
 const nullthrows = require('recoil-shared/util/Recoil_nullthrows');
 const recoverableViolation = require('recoil-shared/util/Recoil_recoverableViolation');
@@ -65,6 +64,7 @@ type InternalProps = {
   initializeState?: MutableSnapshot => void,
   store_INTERNAL?: Store,
   children: React.Node,
+  skipCircularDependencyDetection_DANGEROUS?: boolean,
 };
 
 function notInAContext() {
@@ -120,20 +120,6 @@ function startNextTreeIfNeeded(store: Store): void {
 
 const AppContext = React.createContext<StoreRef>({current: defaultStore});
 const useStoreRef = (): StoreRef => useContext(AppContext);
-
-// $FlowExpectedError[incompatible-call]
-const MutableSourceContext = React.createContext<MutableSource>(null);
-function useRecoilMutableSource(): MutableSource {
-  const mutableSource = useContext(MutableSourceContext);
-  if (mutableSource == null) {
-    expectationViolation(
-      'Attempted to use a Recoil hook outside of a <RecoilRoot>. ' +
-        '<RecoilRoot> must be an ancestor of any component that uses ' +
-        'Recoil hooks.',
-    );
-  }
-  return mutableSource;
-}
 
 function notifyComponents(
   store: Store,
@@ -359,27 +345,34 @@ function initialStoreState(
   return storeState;
 }
 
+let warned = false;
+function RecoilSuspenseWarning() {
+  // prettier-ignore
+  if (!warned) {
+    warned = true;
+    console.warn( // @oss-only
+    // @fb-only: FBLogger('recoil', 'root_suspended').warn(
+      'Suspended <RecoilRoot> detected. The children of <RecoilRoot> should be wrapped in a <Suspense> boundary since RecoilRoot is not designed to suspend.',
+    );
+  }
+  return null;
+}
+
 let nextID = 0;
 function RecoilRoot_INTERNAL({
   initializeState_DEPRECATED,
   initializeState,
   store_INTERNAL: storeProp, // For use with React "context bridging"
   children,
+  skipCircularDependencyDetection_DANGEROUS,
 }: InternalProps): React.Node {
   // prettier-ignore
   // @fb-only: useEffect(() => {
     // @fb-only: if (gkx('recoil_usage_logging')) {
-      // @fb-only: try {
-        // @fb-only: RecoilUsageLogFalcoEvent.log(() => ({
-          // @fb-only: type: RecoilusagelogEvent.RECOIL_ROOT_MOUNTED,
-          // @fb-only: path: URI.getRequestURI().getPath(),
-        // @fb-only: }));
-      // @fb-only: } catch {
-        // @fb-only: recoverableViolation(
-          // @fb-only: 'Error when logging Recoil Usage event',
-          // @fb-only: 'recoil',
-        // @fb-only: );
-      // @fb-only: }
+      // @fb-only: RecoilUsageLogFalcoEvent.log(() => ({
+        // @fb-only: type: RecoilusagelogEvent.RECOIL_ROOT_MOUNTED,
+        // @fb-only: path: URI.getRequestURI().getPath(),
+      // @fb-only: }));
     // @fb-only: }
   // @fb-only: }, []);
 
@@ -486,6 +479,7 @@ function RecoilRoot_INTERNAL({
         getGraph,
         subscribeToTransactions,
         addTransactionMetadata,
+        skipCircularDependencyDetection_DANGEROUS,
       },
   );
   if (storeProp != null) {
@@ -501,15 +495,6 @@ function RecoilRoot_INTERNAL({
       : initializeState != null
       ? initialStoreState(initializeState)
       : makeEmptyStoreState(),
-  );
-
-  const mutableSource = useMemo(
-    () =>
-      createMutableSource?.(
-        storeStateRef,
-        () => storeStateRef.current.currentTree.version,
-      ),
-    [storeStateRef],
   );
 
   // Cleanup when the <RecoilRoot> is unmounted
@@ -532,10 +517,8 @@ function RecoilRoot_INTERNAL({
 
   return (
     <AppContext.Provider value={storeRef}>
-      <MutableSourceContext.Provider value={mutableSource}>
-        <Batcher setNotifyBatcherOfChange={setNotifyBatcherOfChange} />
-        {children}
-      </MutableSourceContext.Provider>
+      <Batcher setNotifyBatcherOfChange={setNotifyBatcherOfChange} />
+      <Suspense fallback={<RecoilSuspenseWarning />}>{children}</Suspense>
     </AppContext.Provider>
   );
 }
@@ -550,6 +533,7 @@ type Props =
       store_INTERNAL?: Store,
       override?: true,
       children: React.Node,
+      skipCircularDependencyDetection_DANGEROUS?: boolean,
     }
   | {
       store_INTERNAL?: Store,
@@ -562,6 +546,7 @@ type Props =
        */
       override: false,
       children: React.Node,
+      skipCircularDependencyDetection_DANGEROUS?: boolean,
     };
 
 function RecoilRoot(props: Props): React.Node {
@@ -584,7 +569,6 @@ function useRecoilStoreID(): StoreID {
 module.exports = {
   RecoilRoot,
   useStoreRef,
-  useRecoilMutableSource,
   useRecoilStoreID,
   notifyComponents_FOR_TESTING: notifyComponents,
   sendEndOfBatchNotifications_FOR_TESTING: sendEndOfBatchNotifications,

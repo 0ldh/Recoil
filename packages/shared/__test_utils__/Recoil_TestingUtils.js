@@ -155,7 +155,7 @@ function renderConcurrentReactRoot<Props>(
 }
 
 function renderUnwrappedElements(
-  elements: ?React.Node,
+  elements: React.Node,
   container?: ?HTMLDivElement,
 ): HTMLDivElement {
   const div = container ?? document.createElement('div');
@@ -166,6 +166,7 @@ function renderUnwrappedElements(
     renderReactRoot(
       div,
       isStrictModeEnabled() ? (
+        // $FlowFixMe[incompatible-call] // @oss-only
         <StrictMode>{elements}</StrictMode>
       ) : (
         // $FlowFixMe[incompatible-call]
@@ -226,7 +227,6 @@ const errorThrowingAsyncSelector: <T, S>(
   msg,
   dep: ?RecoilValue<S>,
 ): RecoilValueReadOnly<T> =>
-  // $FlowFixMe[incompatible-call]
   selector<T>({
     key: `AsyncErrorThrowingSelector${id++}`,
     get: ({get}) => {
@@ -246,7 +246,6 @@ const resolvingAsyncSelector: <T>(T) => RecoilValue<T> = <T>(
   });
 
 const loadingAsyncSelector: () => RecoilValueReadOnly<void> = () =>
-  // $FlowFixMe[incompatible-call]
   selector({
     key: `LoadingSelector${id++}`,
     get: () => new Promise(() => {}),
@@ -263,7 +262,6 @@ function asyncSelector<T, S>(
     resolve = res;
     reject = rej;
   });
-  // $FlowFixMe[incompatible-call]
   const sel = selector({
     key: `AsyncSelector${id++}`,
     // $FlowFixMe[missing-local-annot]
@@ -419,14 +417,6 @@ const WWW_GKS_TO_TEST = QUICK_TEST
   : [
       // OSS for React <18:
       ['recoil_hamt_2020', 'recoil_suppress_rerender_in_callback'], // Also enables early rendering
-      // Current internal default:
-      ['recoil_hamt_2020', 'recoil_mutable_source'],
-      // Internal with suppress, early rendering, and useTransition() support:
-      [
-        'recoil_hamt_2020',
-        'recoil_mutable_source',
-        'recoil_suppress_rerender_in_callback', // Also enables early rendering
-      ],
       // OSS for React 18, test internally:
       [
         'recoil_hamt_2020',
@@ -449,14 +439,8 @@ const WWW_GKS_TO_TEST = QUICK_TEST
  * GK combinations to exclude in OSS, presumably because these combinations pass
  * in FB internally but not in OSS. Ideally this array would be empty.
  */
-const OSS_GK_COMBINATION_EXCLUSIONS = [
-  ['recoil_hamt_2020', 'recoil_mutable_source'],
-  [
-    'recoil_hamt_2020',
-    'recoil_mutable_source',
-    'recoil_suppress_rerender_in_callback',
-  ],
-];
+const OSS_GK_COMBINATION_EXCLUSIONS: $ReadOnlyArray<$ReadOnlyArray<string>> =
+  [];
 
 // eslint-disable-next-line no-unused-vars
 const OSS_GKS_TO_TEST = WWW_GKS_TO_TEST.filter(
